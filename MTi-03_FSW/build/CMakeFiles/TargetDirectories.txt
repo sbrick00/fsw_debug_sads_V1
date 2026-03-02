@@ -1,0 +1,3 @@
+/home/calpolyaero/projects/SADS_FSW/build/CMakeFiles/fsw.dir
+/home/calpolyaero/projects/SADS_FSW/build/CMakeFiles/edit_cache.dir
+/home/calpolyaero/projects/SADS_FSW/build/CMakeFiles/rebuild_cache.dir

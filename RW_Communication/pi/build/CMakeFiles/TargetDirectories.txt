@@ -1,0 +1,3 @@
+/home/calpolyaero/projects/RW_Communication/pi/build/CMakeFiles/rw_i2c.dir
+/home/calpolyaero/projects/RW_Communication/pi/build/CMakeFiles/edit_cache.dir
+/home/calpolyaero/projects/RW_Communication/pi/build/CMakeFiles/rebuild_cache.dir
