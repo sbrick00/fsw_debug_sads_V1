@@ -3,23 +3,74 @@
 
 #include <atomic>
 #include <chrono>
+#include <iostream>
+#include <cstring>
 
-// Comm task placeholder.
-// In the future this is where you would stream telemetry to InfluxDB / UDP / etc.
-// For the first draft, HTTP/AJAX is handled by server_task.cpp
+// Linux networking headers
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+
 void comm_task(SharedState& shared, std::atomic<bool>& stop_flag)
 {
     using namespace std::chrono;
-    const auto period = 200ms; // 5 Hz
+    
+    // IMPORTANT: Update this to match your Simulink model's fixed step size!
+    // For example, if Simulink runs at 50 Hz, set this to 20ms.
+    const auto period = 20ms; 
+
+    // --- 1. Socket Setup ---
+    int sock = socket(AF_INET, SOCK_DGRAM, 0);
+    if (sock < 0) {
+        std::cerr << "[comm_task] Failed to create UDP socket\n";
+        return;
+    }
+
+    struct sockaddr_in dest_addr;
+    std::memset(&dest_addr, 0, sizeof(dest_addr));
+    dest_addr.sin_family = AF_INET;
+    dest_addr.sin_port = htons(5000);                   // The port Simulink will listen on
+    dest_addr.sin_addr.s_addr = inet_addr("127.0.0.1"); // Send to local loopback
+
+    // Flat array to hold our 10 float values (40 bytes total)
+    std::array<float, 10> udp_payload{};
 
     auto next = steady_clock::now();
     while (!stop_flag.load())
     {
         next += period;
 
-        // Touch shared state so the thread isn't "dead code".
-        (void)shared.snapshot();
+        // --- 2. Grab a thread-safe snapshot of the whiteboard ---
+        auto s = shared.snapshot();
 
+        // --- 3. Pack the payload ---
+        // Quaternions
+        udp_payload[0] = s.est_imu.q[0];
+        udp_payload[1] = s.est_imu.q[1];
+        udp_payload[2] = s.est_imu.q[2];
+        udp_payload[3] = s.est_imu.q[3];
+        
+        // Body Rates (rad/s)
+        udp_payload[4] = s.est_imu.omega[0];
+        udp_payload[5] = s.est_imu.omega[1];
+        udp_payload[6] = s.est_imu.omega[2];
+        
+        // Euler Angles (rad)
+        udp_payload[7] = s.est_euler.roll_rad;
+        udp_payload[8] = s.est_euler.pitch_rad;
+        udp_payload[9] = s.est_euler.yaw_rad;
+
+        // --- 4. Send the UDP Packet ---
+        // We cast the data to a void pointer and specify the exact byte size (10 * 4 = 40 bytes)
+        sendto(sock, udp_payload.data(), sizeof(udp_payload), 0,
+               (struct sockaddr*)&dest_addr, sizeof(dest_addr));
+
+        // Sleep until the next cycle to maintain rigid timing
         sleep_until(next);
     }
+
+    // Clean up
+    close(sock);
+    std::puts("[comm_task] UDP socket closed.");
 }
