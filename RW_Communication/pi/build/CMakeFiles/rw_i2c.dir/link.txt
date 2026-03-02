@@ -1,0 +1,1 @@
+/usr/bin/c++ CMakeFiles/rw_i2c.dir/main.cpp.o CMakeFiles/rw_i2c.dir/i2c_rw.cpp.o -o rw_i2c 

@@ -1,0 +1,1 @@
+/usr/bin/c++ CMakeFiles/fsw.dir/main.cpp.o CMakeFiles/fsw.dir/imu/mti03_driver.cpp.o -o fsw 
