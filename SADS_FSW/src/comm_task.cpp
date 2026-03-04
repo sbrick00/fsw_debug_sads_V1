@@ -31,7 +31,7 @@ void comm_task(SharedState& shared, std::atomic<bool>& stop_flag)
     std::memset(&dest_addr, 0, sizeof(dest_addr));
     dest_addr.sin_family = AF_INET;
     dest_addr.sin_port = htons(5000);                   // The port Simulink will listen on
-    dest_addr.sin_addr.s_addr = inet_addr("127.0.0.1"); // Send to local loopback
+    dest_addr.sin_addr.s_addr = inet_addr("127.0.0.1"); // Send to local loopback!
 
     // Flat array to hold our 10 float values (40 bytes total)
     std::array<float, 10> udp_payload{};
