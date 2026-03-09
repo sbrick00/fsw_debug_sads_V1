@@ -62,13 +62,13 @@ static void send_all(int fd, const std::string& s)
 
 static std::string telemetry_json(const SharedState::Snapshot& s)
 {
-    // Note: keep this JSON stable for the frontend.
     char buf[1400];
-
     std::snprintf(buf, sizeof(buf),
         "{"
         "\"t_us\":%llu,"
         "\"valid\":%s,"
+        "\"mode\":%d,"                 // --- NEW ---
+        "\"stepper_cmds\":[%d,%d,%d]," // --- NEW ---
         "\"eul\":[%.7g,%.7g,%.7g],"
         "\"q\":[%.7g,%.7g,%.7g,%.7g],"
         "\"omega\":[%.7g,%.7g,%.7g],"
@@ -78,6 +78,8 @@ static std::string telemetry_json(const SharedState::Snapshot& s)
         "}",
         (unsigned long long)s.t_us,
         s.est_imu.valid ? "true" : "false",
+        (int)s.current_mode,           // --- NEW ---
+        s.stepper_cmds[0], s.stepper_cmds[1], s.stepper_cmds[2], // --- NEW ---
         (s.est_euler.roll_rad * 180.0f / 3.14159265f), (s.est_euler.pitch_rad * 180.0f / 3.14159265f), (s.est_euler.yaw_rad * 180.0f / 3.14159265f),
         s.est_imu.q[0], s.est_imu.q[1], s.est_imu.q[2], s.est_imu.q[3],
         s.est_imu.omega[0], s.est_imu.omega[1], s.est_imu.omega[2],
@@ -87,7 +89,6 @@ static std::string telemetry_json(const SharedState::Snapshot& s)
         s.wheels[0].rpm, s.wheels[1].rpm, s.wheels[2].rpm,
         s.wheel_torque_cmd_nm[0], s.wheel_torque_cmd_nm[1], s.wheel_torque_cmd_nm[2]
     );
-
     return std::string(buf);
 }
 
@@ -199,30 +200,48 @@ void server_task(SharedState& shared, std::atomic<bool>& stop_flag, int port, co
             continue;
         }
 
-        if (method != "GET")
+        if (method == "GET")
         {
-            respond_404(client);
-            ::close(client);
-            continue;
+            if (path == "/" || path == "/index.html") {
+                auto body = read_file(web_root + "/index.html");
+                if (body.empty()) respond_404(client);
+                else respond_200(client, "text/html; charset=utf-8", body);
+            }
+            else if (path == "/plots.js" || path == "/style.css") {
+                auto body = read_file(web_root + path);
+                if (body.empty()) respond_404(client);
+                else respond_200(client, content_type_for_path(path), body);
+            }
+            else if (path == "/telemetry") {
+                auto snap = shared.snapshot();
+                auto body = telemetry_json(snap);
+                respond_200(client, "application/json; charset=utf-8", body);
+            }
+            else {
+                respond_404(client);
+            }
         }
-
-        if (path == "/" || path == "/index.html")
+        else if (method == "POST") 
         {
-            auto body = read_file(web_root + "/index.html");
-            if (body.empty()) respond_404(client);
-            else respond_200(client, "text/html; charset=utf-8", body);
-        }
-        else if (path == "/plots.js" || path == "/style.css")
-        {
-            auto body = read_file(web_root + path);
-            if (body.empty()) respond_404(client);
-            else respond_200(client, content_type_for_path(path), body);
-        }
-        else if (path == "/telemetry")
-        {
-            auto snap = shared.snapshot();
-            auto body = telemetry_json(snap);
-            respond_200(client, "application/json; charset=utf-8", body);
+            // --- NEW: POST endpoints for switching modes ---
+            if (path == "/mode/simulink") {
+                std::lock_guard<std::mutex> lock(shared.mtx);
+                shared.current_mode = ControlMode::STEPPER_SIMULINK;
+                respond_200(client, "text/plain", "Mode set to SIMULINK");
+            }
+            else if (path == "/mode/rw") {
+                std::lock_guard<std::mutex> lock(shared.mtx);
+                shared.current_mode = ControlMode::RW_PID;
+                respond_200(client, "text/plain", "Mode set to RW PID");
+            }
+            else if (path == "/mode/idle") {
+                std::lock_guard<std::mutex> lock(shared.mtx);
+                shared.current_mode = ControlMode::IDLE;
+                respond_200(client, "text/plain", "Mode set to IDLE");
+            }
+            else {
+                respond_404(client);
+            }
         }
         else
         {

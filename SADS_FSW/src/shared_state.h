@@ -20,6 +20,13 @@ struct EulerAngles {
     float yaw_rad = 0.0f;
 };
 
+// Add basic control modes
+enum class ControlMode {
+    IDLE,
+    RW_PID,             // Existing reaction wheel logic [bricen]
+    STEPPER_SIMULINK    // New Simulink logic [underactuated horizontal pid]
+};
+
 // Single source of truth shared across tasks.
 struct SharedState
 {
@@ -44,12 +51,20 @@ struct SharedState
     uint64_t last_ctrl_us = 0;
     uint64_t last_rw_us   = 0;
 
+    // Control Mode state variables
+    ControlMode current_mode = ControlMode::IDLE;
+    std::array<int32_t, 3> stepper_cmds{}; // for the three stepper motors 
+
     struct Snapshot
     {
         ImuState est_imu;
         EulerAngles est_euler;
+
         std::array<WheelState, NUM_WHEELS> wheels;
         std::array<float, NUM_WHEELS> wheel_torque_cmd_nm;
+        ControlMode current_mode;
+        std::array<int32_t, 3> stepper_cmds;
+
         uint64_t t_us = 0;
     };
 
@@ -57,10 +72,15 @@ struct SharedState
     {
         std::lock_guard<std::mutex> lock(mtx);
         Snapshot s;
+
         s.est_imu = est_imu;
         s.est_euler = est_euler;
+
         s.wheels = wheels;
         s.wheel_torque_cmd_nm = wheel_torque_cmd_nm;
+        s.current_mode = current_mode;
+        s.stepper_cmds = stepper_cmds;
+        
         s.t_us = last_meas_us;
         return s;
     }
